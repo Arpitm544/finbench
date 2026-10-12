@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finbench"
+version = "0.1.0"
+description = "Financial Risk Analytics & AI Benchmark Evaluation System"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Arpit Maurya", email = "arpitbabu802@gmail.com" }
+]
+dependencies = [
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "polars>=0.20.0",
+    "scipy>=1.12.0",
+    "statsmodels>=0.14.0",
+    "scikit-learn>=1.4.0",
+    "lightgbm>=4.3.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "streamlit>=1.32.0",
+    "plotly>=5.20.0",
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
