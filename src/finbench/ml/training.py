@@ -2,18 +2,26 @@ from datetime import datetime
 import logging
 import time
 from typing import Dict, Any, Tuple
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
+
+logger = logging.getLogger(__name__)
+
+# Attempt to import LightGBM, with fallback to HistGradientBoostingClassifier
+HAS_LIGHTGBM = False
+try:
+    import lightgbm as lgb
+    HAS_LIGHTGBM = True
+except (ImportError, OSError):
+    HAS_LIGHTGBM = False
+    logger.warning("LightGBM native library unavailable; using scikit-learn HistGradientBoostingClassifier.")
 
 from finbench.config import settings
 from finbench.database import SessionLocal, ModelTrainingRun, init_db
 from finbench.ml.features import FeatureEngineeringPipeline
-
-logger = logging.getLogger(__name__)
 
 
 class FraudModelTrainer:
@@ -76,22 +84,33 @@ class FraudModelTrainer:
 
     def train_lightgbm(
         self, X_train: np.ndarray, y_train: np.ndarray
-    ) -> Tuple[lgb.LGBMClassifier, float]:
+    ) -> Tuple[Any, float]:
         start = time.perf_counter()
-        # Scale pos weight to balance rare positive class
         neg_count = np.sum(y_train == 0)
         pos_count = max(1, np.sum(y_train == 1))
         scale_pos_weight = neg_count / pos_count
 
-        clf = lgb.LGBMClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.05,
-            scale_pos_weight=scale_pos_weight,
-            random_state=42,
-            verbose=-1,
-        )
-        clf.fit(X_train, y_train)
+        if HAS_LIGHTGBM:
+            clf = lgb.LGBMClassifier(
+                n_estimators=100,
+                max_depth=6,
+                learning_rate=0.05,
+                scale_pos_weight=scale_pos_weight,
+                random_state=42,
+                verbose=-1,
+            )
+            clf.fit(X_train, y_train)
+        else:
+            # High-performance scikit-learn histogram gradient boosting
+            clf = HistGradientBoostingClassifier(
+                max_iter=100,
+                max_depth=6,
+                learning_rate=0.05,
+                class_weight="balanced",
+                random_state=42,
+            )
+            clf.fit(X_train, y_train)
+
         duration = time.perf_counter() - start
         self.models["lightgbm"] = clf
         return clf, duration
