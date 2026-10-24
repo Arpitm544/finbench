@@ -16,7 +16,6 @@ class BenchmarkScoringEngine:
             return float(text_val)
         if not isinstance(text_val, str):
             return None
-        # Remove commas and currency signs
         cleaned = text_val.replace(",", "").replace("$", "").replace("%", "").strip()
         match = re.search(r"[-+]?\d*\.?\d+", cleaned)
         if match:
@@ -38,16 +37,13 @@ class BenchmarkScoringEngine:
         if pred_num is None:
             return 0.0, f"Predicted answer '{predicted}' could not be parsed as a number."
 
-        # Relative or absolute tolerance check
         abs_diff = abs(exp_num - pred_num)
         denom = max(1.0, abs(exp_num))
         rel_diff = abs_diff / denom
 
-        # Accept if within tolerance
         if abs_diff <= tolerance or rel_diff <= tolerance:
             return 1.0, f"Matched expected {exp_num} (Predicted: {pred_num}, Delta: {abs_diff:.4f} <= Tol: {tolerance})"
         
-        # Partial credit if within 2x tolerance
         if rel_diff <= (tolerance * 2.5):
             return 0.5, f"Partial credit: within 2.5x tolerance (Expected: {exp_num}, Predicted: {pred_num}, RelDiff: {rel_diff:.4f})"
 
@@ -62,13 +58,12 @@ class BenchmarkScoringEngine:
             return 0.0, "Empty response received."
 
         if not rubric:
-            # Fallback to substring matching on expected
             exp_str = str(expected).lower()
             if exp_str in pred_str:
                 return 1.0, "Direct semantic match with reference answer."
             return 0.5, "Partial semantic alignment."
 
-        key_points = rubric.get("key_points", [])
+        key_points = rubric.get("key_points", []) or rubric.get("required_reasoning", [])
         required_terms = rubric.get("required_terms", [])
         expected_decision = rubric.get("expected_decision")
 
@@ -77,12 +72,15 @@ class BenchmarkScoringEngine:
 
         # Check required decision
         if expected_decision:
-            if expected_decision.lower() in pred_str or (
-                "stricter" in pred_str if "stricter" in expected_decision.lower() else False
-            ) or (
-                "relaxed" in pred_str if "relaxed" in expected_decision.lower() else False
+            exp_dec_clean = expected_decision.lower().replace("_", " ")
+            if (
+                expected_decision.lower() in pred_str
+                or exp_dec_clean in pred_str
+                or ("stricter" in pred_str if "stricter" in exp_dec_clean else False)
+                or ("relaxed" in pred_str if "relaxed" in exp_dec_clean else False)
+                or ("reject" in pred_str if "reject" in exp_dec_clean else False)
             ):
-                score += 0.4
+                score += 0.5
                 feedback_notes.append("Correct core business decision reached.")
             else:
                 feedback_notes.append(f"Failed expected decision: {expected_decision}.")
@@ -98,17 +96,17 @@ class BenchmarkScoringEngine:
         if key_points:
             matched_pts = 0
             for pt in key_points:
-                # Simple keyword heuristic across words in point
-                words = [w.lower() for w in re.findall(r"\w+", pt) if len(w) > 4]
+                words = [w.lower() for w in re.findall(r"\w+", pt) if len(w) > 3]
                 if any(w in pred_str for w in words):
                     matched_pts += 1
-            pt_score = (matched_pts / len(key_points)) * 0.4
+            weight = 0.5 if expected_decision else (0.7 if required_terms else 1.0)
+            pt_score = (matched_pts / len(key_points)) * weight
             score += pt_score
             feedback_notes.append(f"Covered {matched_pts}/{len(key_points)} key reasoning components.")
 
         final_score = min(1.0, round(score, 2))
         if final_score == 0.0 and len(pred_str) > 20:
-            final_score = 0.25  # Attempt credit
+            final_score = 0.25
 
         return final_score, "; ".join(feedback_notes)
 
